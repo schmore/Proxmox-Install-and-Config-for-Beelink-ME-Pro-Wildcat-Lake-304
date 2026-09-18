@@ -1,0 +1,19 @@
+# Ensure target system directories exist
+sudo mkdir -p /lib/firmware/i915
+sudo mkdir -p /lib/firmware/xe
+sudo mkdir -p /lib/firmware/intel/vpu
+
+# 1. Download Display Microcontroller firmware
+sudo wget -O /lib/firmware/i915/xe3lpd_3002_dmc.bin https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/i915/xe3lpd_3002_dmc.bin
+
+# 2. Download Panther Lake/Wildcat Lake Graphics microcode
+sudo wget -O /lib/firmware/xe/ptl_guc_70.bin https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/xe/ptl_guc_70.bin
+sudo wget -O /lib/firmware/xe/ptl_huc.bin https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/xe/ptl_huc.bin
+sudo wget -O /lib/firmware/xe/ptl_gsc_1.bin https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/xe/ptl_gsc_1.bin
+# 3. Download the NPU v50xx firmware files
+###see https://github.com/intel/linux-npu-driver/releases
+#or try this
+sudo wget -O /lib/firmware/intel/vpu/vpu_50xx_v1.bin https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/intel/vpu/vpu_50xx_v1.bin
+
+sudo update-initramfs -u -k all
+sudo reboot

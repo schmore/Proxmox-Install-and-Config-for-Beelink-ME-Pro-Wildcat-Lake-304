@@ -5,7 +5,7 @@ Lots of issues to deal with related to drivers and some hardware limitations.
 
 I used Gemini quite a bit in the process of troubleshooting so much of the scripts/code are written partially or entirely by AI but guided by a real human (and linux/homelab noob) the whole way.
 
-##Driver issues: Wildcat Lake iGPU/NPU 
+## Driver issues: Wildcat Lake iGPU/NPU 
 The Wildcat lake CPU defaulted to the i915 drivers that didn't work correctly for me when trying igpu/npu passthrough. Installed the Xe series drivers manually and was successful with pcie passthrough afterwards (transcoding for jellyfin, reencoding with handbrake, Immich machine learning features, etc). See separate doc for install details and igpu/npu passthrough setup.
 
 ## Driver Issues: Realtek Semiconductor Co., Ltd. RTL8127 10GbE Controller
@@ -28,7 +28,7 @@ lspci -nnk
 
 The 2.5GbE port (57:00.0) was working fine but note the mismatched driver for the realtek controller (58:00.0). Manually installing the correct drivers directly downloaded from Realtek fixed the issue and let me connect to the 10GbE card at full speed on my larger NAS directly. See separate document for details on the install and setting up the network bridge and openmediavault VM connection to Unraid in proxmox using the realtek controller and 10G network card on the Unraid box.
 
-##ASMedia 1062 SATA Controller does not support PCIe passthrough (lacks function level reset)
+## ASMedia 1062 SATA Controller does not support PCIe passthrough (lacks function level reset)
 I wanted to run Unraid in a VM to manage my 2x8TB SATA drives and then point my other VMs/etc. towards Unraid. I had schemes to add more disks (JBOD setup) with an M.2 to SATA port expander but gave up on the idea after going through this process. Ultimately I used Proxmox's native ZFS features instead and it worked fine but I needed more than 2 bays to store my collection of linux isos. 
 
 I spent a long time troubleshooting the passthrough of the ASMedia 1062 SATA controller so Unraid could properly manage the drives. I found the controller is ultimately not compatible with passthrough in this hardware configuration. As I understand it, the controller needs to be reset when handed off to the VM from the host and this chip does not support this operation. I tried a number of workarounds and nothing was successful but I'm leaving some of my troubleshooting notes for reference.

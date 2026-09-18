@@ -80,7 +80,7 @@ root@node:~# ip link show
 #the controller is nic0. If not initially reporting state UP, run:  
 root@node:~# ip link set nic0 up
 #test the properties  
-root@LilNASME:~# ethtool nic0
+root@node:~# ethtool nic0
 Settings for nic0:
         Supported ports: [ TP ]
         Supported link modes:   10baseT/Half 10baseT/Full

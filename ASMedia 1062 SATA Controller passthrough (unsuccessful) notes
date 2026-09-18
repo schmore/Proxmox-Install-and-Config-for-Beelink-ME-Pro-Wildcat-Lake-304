@@ -1,0 +1,538 @@
+Very loosely organized notes from trying to get this to work (it did not), used proxmox native ZFS features instead
+
+The Beelink ME Pro Mini 2-Bay Wildcat Lake 304 has an ASMedia 1062 SATA controller
+I want to passthrough the SATA controller to an Unraid VM running inside of Proxmox so I can directly control the drives via Unraid without installing it on bare metal
+
+Ultimately, because the SATA controller does not have function level reset (cannot be reset to handoff to the VM, no software/os level reset/reboot method) the PCI passthrough will not work
+=(
+
+########gpu passthrough###########
+some bullshit installer.conf in /etc/default/grub.d was adding a nomodeset flag that prevented the 'xe' iGPU driver from binding at boot. disabling that file fixed it!
+
+
+-----------Key files/directories-------------
+##########################################
+####some explanatory stuff from Gemini####
+##########################################
+
+/etc/default/grub (bootloader)
+
+A bootloader in Linux is a small software program that loads the operating system kernel into the computer's memory after the computer finishes turning on. [1, 2, 3] 
+## Key Functions of a Linux Bootloader
+
+* Bridges Firmware and Kernel: Takes over control from your computer's startup firmware (such as [BIOS or UEFI](https://www.baeldung.com/linux/bootloader-definition)) once hardware checks finish. [3, 4] 
+* Provides a Boot Menu: Displays a list of installed operating systems or different Linux kernel versions so you can pick which one to start. [1, 5, 6] 
+* Loads into RAM: Locates the main system files and copies the kernel and temporary root filesystem (initramfs) from your hard drive into the primary memory (RAM). [2, 3] 
+* Passes Parameters: Allows you to type or change startup settings and commands before the kernel starts, which helps with troubleshooting. [2, 3, 5] 
+
+## Common Linux Bootloaders
+
+* [GNU GRUB](https://serverspace.us/support/help/what-is-grub-the-boot-loader-without-which-linux-wont-start/) (Grand Unified Bootloader) is the standard and most widely used bootloader on modern desktop Linux computers.
+* Syslinux is frequently used for lightweight or portable live-USB media.
+* U-Boot is popular for embedded devices like routers and the Raspberry Pi. [1, 2, 5, 7] 
+
+[1] [https://www.youtube.com](https://www.youtube.com/watch?v=I-hyCLMht70)
+[2] [https://www.youtube.com](https://www.youtube.com/watch?v=0Vix2t7tQE8&t=526)
+[3] [https://www.linkedin.com](https://www.linkedin.com/posts/zubair-ahmed-9602821b9_what-is-a-bootloader-how-does-linux-activity-7406262425865555968-vwa1)
+[4] [https://serverspace.io](https://serverspace.io/support/help/what-is-grub-linux-and-windows-boot-loader-configuration-and-recovery/)
+[5] [https://www.youtube.com](https://www.youtube.com/watch?v=ShKh-18fK54&t=425)
+[6] [https://www.lenovo.com](https://www.lenovo.com/us/en/glossary/grub/)
+[7] [https://serverspace.us](https://serverspace.us/support/help/what-is-grub-the-boot-loader-without-which-linux-wont-start/)
+
+########################################
+/etc/modprobe.d/*.conf 
+/etc/modules-load.d/*.conf
+
+
+In Linux, both directories control how kernel modules (drivers) behave, but /etc/modules-load.d/ decides which modules automatically load at boot, while /etc/modprobe.d/ decides how those modules behave (parameters, blacklisting, and aliases) whenever they are loaded. [1, 2] 
+## /etc/modules-load.d/ (The "What")
+This directory is used by modern service managers like systemd to load a static list of kernel modules during system startup. [3, 4] 
+
+* How it works: You create a file ending in .conf (e.g., /etc/modules-load.d/wireguard.conf) and simply type the module name on a new line.
+* Syntax: Plain text. One module name per line. Comments start with #.
+* Limitations: You cannot pass arguments, tweak settings, or blacklist modules here. It only triggers a blind, straightforward load. [1, 3, 5, 6] 
+
+## /etc/modprobe.d/ (The "How")
+This directory configures the modprobe utility, which is the application responsible for actually inserting and removing modules from the kernel. Files here apply rules whether a module is loaded automatically at boot or manually by a user later on. [7, 8, 9] 
+Configuration files in this directory use specific command keywords to achieve four primary functions:
+
+* Passing Options: Fine-tune module behavior by feeding it settings.
+* Syntax: options [module_name] [parameter]=[value]
+   * Example: options i915 enable_guc=3 (Enables a specific feature on Intel graphics drivers). [1, 10] 
+* Blacklisting: Stop specific modules from loading automatically. This is helpful for disabling broken or conflicting hardware drivers.
+* Syntax: blacklist [module_name]
+   * Example: blacklist nouveau (Commonly used to disable the open-source Nvidia driver when installing proprietary ones). [1, 5] 
+* Creating Aliases: Give an alternate name to a module.
+* Syntax: alias [alias_name] [real_module_name] [1] 
+* Soft Dependencies: Instruct the system to load one module immediately before or after another module.
+* Syntax: softdep [module_name] pre: [other_module]
+
+## Summary Table
+
+| Feature | /etc/modules-load.d/*.conf | /etc/modprobe.d/*.conf |
+|---|---|---|
+| Primary Purpose | Forces modules to load during system boot. | Sets rules, custom parameters, and limits for modules. |
+| Triggered By | systemd-modules-load.service. | The modprobe execution tool. |
+| Accepts Options? | No. | Yes. |
+| Can Blacklist? | No. | Yes. |
+
+
+[1] [https://forum.manjaro.org](https://forum.manjaro.org/t/etc-modprobe-d-vs-etc-modules-load-d/36537)
+[2] [https://docs.oracle.com](https://docs.oracle.com/en/operating-systems/oracle-linux/8/boot/boot-ManagingKernelModules.html)
+[3] [https://wiki.archlinux.org](https://wiki.archlinux.org/title/Kernel_module)
+[4] [https://www.freedesktop.org](https://www.freedesktop.org/software/systemd/man/modules-load.d.html)
+[5] [https://documentation.suse.com](https://documentation.suse.com/sles/12-SP5/html/SLES-all/cha-mod.html)
+[6] [https://www.naut.ca](https://www.naut.ca/blog/2024/11/30/configure-kernel-modules-like-a-pro/)
+[7] [https://linuxize.com](https://linuxize.com/post/modprobe-command-in-linux/)
+[8] [https://www.youtube.com](https://www.youtube.com/watch?v=oCqRG75ofV8&t=147)
+[9] [https://www.youtube.com](https://www.youtube.com/watch?v=sNN98SBuRjE)
+[10] [https://askubuntu.com](https://askubuntu.com/questions/1024777/what-is-the-difference-between-etc-modules-and-etc-modprobe-d)
+
+
+################
+Can you summarize what these modules do?
+vfio
+vfio_iommu_type1
+vfio_pci
+vfio_virqfd
+
+Together, these four modules form the core framework for VFIO (Virtual Function I/O), a powerful Linux kernel subsystem that allows safe, high-performance physical device pass-through to virtual machines (VMs). It is most commonly used for GPU pass-through (VFIO gaming), allowing a VM to access a graphics card at near-native physical speeds.
+Here is what each specific module does:
+## vfio
+This is the core infrastructure module for the VFIO framework.
+
+* It provides the base drivers and exposes a unified user-space interface (via device files in /dev/vfio/) that virtualization software like QEMU or KVM can interact with.
+* On its own, it does not handle specific hardware; it acts as the coordinator.
+
+## vfio_iommu_type1
+This module manages memory protection and security using your CPU's hardware virtualization features (Intel VT-d or AMD-Vi).
+
+* It interacts directly with the system's IOMMU (Input-Output Memory Management Unit).
+* It ensures that the virtual machine cannot abuse the physical device to access or corrupt host system memory, isolated into specific "IOMMU groups."
+
+## vfio_pci
+This is the driver that binds to physical PCI/PCIe devices (like your graphics card or network adapter) to hand them over to VFIO.
+
+* It unbinds the hardware from its normal host OS driver (e.g., amdgpu or nouveau) and "attaches" it to VFIO instead.
+* This prepares the specific PCIe card to be safely handed directly to the virtual machine.
+
+## vfio_virqfd
+This module handles virtual interrupt signaling between the physical hardware and the guest virtual machine.
+
+* It connects VFIO interrupts to system eventfd files, creating a highly efficient, low-overhead pipeline for hardware signals.
+* This is critical for performance, ensuring minimal latency when the passed-through device talks to the VM.
+
+------------Important commands---------------
+update-initramfs -u -k all #run after updating modprobe or modules
+update-grub #run after updating grub
+
+lsusb #for usb devices, haven't needed to use this one much
+lspci -vvv #full detail of attached PCI devices
+lspci -nnk #PCI devices summary with driver utilization info (i.e. is vfio-pci or ahci in control)
+dmesg
+grep -i searchstring # pipe lspci or other to this to filter output that includes searchstring
+
+dmesg is a command-line utility on Unix-like operating systems used to view and control the kernel ring buffer, printing diagnostic messages related to hardware devices, driver loading, and system boot processes
+lspci is a command-line utility used on Unix-like operating systems to display detailed information about all PCI buses and the devices connected to them
+The lsusb command is a Linux Utility used to display information about USB buses and the connected hardware devices on a system
+
+nano /path/to/file #open file in simple text editor. To save, Ctrl+O --> Enter (if file name is ok) --> Ctrl+X (exit)
+GNU nano is a simple text editor for the terminal in Unix and Linux systems
+
+-----------------Procedure------------------
+Create VM with UEFI bios, disable secure boot in VM console (will fail to boot on first launch of VM)
+
+SATA controller passthrough (Proxmox --> Unraid):
+lspci -nn | grep -i sata
+
+>01:00.0 SATA controller [0106]: ASMedia Technology Inc. Device [1b21:1062] (rev 02)
+
+nano /etc/modprobe.d/vfio.conf #add the following:
+
+options vfio-pci ids=1b21:1062 disable_idle_d3=1
+softdep ahci pre: vfio-pci
+
+nano /etc/modules-load.d/vfio
+
+vfio
+vfio_iommu_type1
+vfio_pci
+vfio_virqfd
+
+
+nano /etc/modprobe.d/blacklist.conf
+
+ahci
+
+bash:
+update-initramfs -u -k all
+
+
+CHANGE /etc/default/grub
+GRUB_..DEFAULT LINUX = "____ add args here" # forgot what they were but didnt work anyway, set iommu on here
+
+reboot beelink pc
+
+
+
+#when sata controller is crashed:
+lspci -vvv
+01:00.0 SATA controller: ASMedia Technology Inc. Device 1062 (rev 02) (prog-if 01 [AHCI 1.0])
+        Subsystem: ASMedia Technology Inc. Device 2116
+        !!! Unknown header type 7f
+        Physical Slot: 4
+        Interrupt: pin ? routed to IRQ 16
+        IOMMU group: 18
+        Region 0: Memory at 94c82000 (32-bit, non-prefetchable) [size=8K]
+        Region 5: Memory at 94c80000 (32-bit, non-prefetchable) [size=8K]
+        Expansion ROM at 94c00000 [disabled] [size=512K]
+        Kernel modules: ahci
+
+#after full power cycle of host unit:
+01:00.0 SATA controller: ASMedia Technology Inc. Device 1062 (rev 02) (prog-if 01 [AHCI 1.0])
+        Subsystem: ASMedia Technology Inc. Device 2116
+        Physical Slot: 4
+        Control: I/O+ Mem+ BusMaster+ SpecCycle- MemWINV- VGASnoop- ParErr- Stepping- SERR- FastB2B- DisINTx+
+        Status: Cap+ 66MHz- UDF- FastB2B- ParErr- DEVSEL=fast >TAbort- <TAbort- <MAbort- >SERR- <PERR- INTx-
+        Latency: 0, Cache Line Size: 64 bytes
+        Interrupt: pin A routed to IRQ 148
+        IOMMU group: 18
+        Region 0: Memory at 94c82000 (32-bit, non-prefetchable) [size=8K]
+        Region 5: Memory at 94c80000 (32-bit, non-prefetchable) [size=8K]
+        Expansion ROM at 94c00000 [disabled] [size=512K]
+        Capabilities: [40] Power Management version 3
+                Flags: PMEClk- DSI+ D1- D2- AuxCurrent=0mA PME(D0+,D1-,D2-,D3hot+,D3cold+)
+                Status: D0 NoSoftRst- PME-Enable- DSel=0 DScale=0 PME-
+        Capabilities: [50] MSI: Enable+ Count=1/1 Maskable- 64bit+
+                Address: 00000000fee00558  Data: 0000
+        Capabilities: [80] Express (v2) Endpoint, IntMsgNum 0
+                DevCap: MaxPayload 256 bytes, PhantFunc 0, Latency L0s unlimited, L1 unlimited
+                        ExtTag+ AttnBtn- AttnInd- PwrInd- RBE+ FLReset- SlotPowerLimit 10W TEE-IO-
+                DevCtl: CorrErr+ NonFatalErr+ FatalErr+ UnsupReq+
+                        RlxdOrd+ ExtTag+ PhantFunc- AuxPwr- NoSnoop+
+                        MaxPayload 256 bytes, MaxReadReq 256 bytes
+                DevSta: CorrErr- NonFatalErr- FatalErr- UnsupReq- AuxPwr- TransPend-
+                LnkCap: Port #0, Speed 8GT/s, Width x1, ASPM L0s L1, Exit Latency L0s <4us, L1 <64us
+                        ClockPM+ Surprise- LLActRep- BwNot- ASPMOptComp+
+                LnkCtl: ASPM Disabled; RCB 64 bytes, LnkDisable- CommClk-
+                        ExtSynch- ClockPM+ AutWidDis- BWInt- AutBWInt-
+                LnkSta: Speed 8GT/s, Width x1
+                        TrErr- Train- SlotClk+ DLActive- BWMgmt- ABWMgmt-
+                DevCap2: Completion Timeout: Not Supported, TimeoutDis- NROPrPrP- LTR-
+                         10BitTagComp- 10BitTagReq- OBFF Not Supported, ExtFmt- EETLPPrefix-
+                         EmergencyPowerReduction Not Supported, EmergencyPowerReductionInit-
+                         FRS- TPHComp- ExtTPHComp-
+                         AtomicOpsCap: 32bit- 64bit- 128bitCAS-
+                DevCtl2: Completion Timeout: 50us to 50ms, TimeoutDis-
+                         AtomicOpsCtl: ReqEn-
+                         IDOReq- IDOCompl- LTR- EmergencyPowerReductionReq-
+                         10BitTagReq- OBFF Disabled, EETLPPrefixBlk-
+                LnkCap2: Supported Link Speeds: 2.5-8GT/s, Crosslink- Retimer- 2Retimers- DRS-
+                LnkCtl2: Target Link Speed: 8GT/s, EnterCompliance- SpeedDis+
+                         Transmit Margin: Normal Operating Range, EnterModifiedCompliance- ComplianceSOS-
+                         Compliance Preset/De-emphasis: -6dB de-emphasis, 0dB preshoot
+                LnkSta2: Current De-emphasis Level: -6dB, EqualizationComplete+ EqualizationPhase1+
+                         EqualizationPhase2+ EqualizationPhase3+ LinkEqualizationRequest-
+                         Retimer- 2Retimers- CrosslinkRes: unsupported
+        Capabilities: [100 v1] Advanced Error Reporting
+                UESta:  DLP- SDES- TLP- FCP- CmpltTO- CmpltAbrt- UnxCmplt- RxOF- MalfTLP-
+                        ECRC- UnsupReq- ACSViol- UncorrIntErr- BlockedTLP- AtomicOpBlocked- TLPBlockedErr-
+                        PoisonTLPBlocked- DMWrReqBlocked- IDECheck- MisIDETLP- PCRC_CHECK- TLPXlatBlocked-
+                UEMsk:  DLP- SDES- TLP- FCP- CmpltTO- CmpltAbrt- UnxCmplt- RxOF- MalfTLP-
+                        ECRC- UnsupReq- ACSViol- UncorrIntErr+ BlockedTLP- AtomicOpBlocked- TLPBlockedErr-
+                        PoisonTLPBlocked+ DMWrReqBlocked- IDECheck- MisIDETLP- PCRC_CHECK- TLPXlatBlocked-
+                UESvrt: DLP+ SDES+ TLP- FCP+ CmpltTO- CmpltAbrt- UnxCmplt- RxOF+ MalfTLP+
+                        ECRC- UnsupReq- ACSViol- UncorrIntErr+ BlockedTLP- AtomicOpBlocked- TLPBlockedErr-
+                        PoisonTLPBlocked- DMWrReqBlocked- IDECheck- MisIDETLP- PCRC_CHECK- TLPXlatBlocked-
+                CESta:  RxErr- BadTLP- BadDLLP- Rollover- Timeout- AdvNonFatalErr- CorrIntErr- HeaderOF-
+                CEMsk:  RxErr- BadTLP- BadDLLP- Rollover- Timeout- AdvNonFatalErr+ CorrIntErr+ HeaderOF+
+                AERCap: First Error Pointer: 00, ECRCGenCap- ECRCGenEn- ECRCChkCap- ECRCChkEn-
+                        MultHdrRecCap- MultHdrRecEn- TLPPfxPres- HdrLogCap-
+                HeaderLog: 00000000 00000000 00000000 00000000
+        Capabilities: [130 v1] Secondary PCI Express
+                LnkCtl3: LnkEquIntrruptEn- PerformEqu-
+                LaneErrStat: 0
+        Kernel driver in use: ahci
+        Kernel modules: ahci
+
+
+root@LilNAS-ME:/etc/modules-load.d# dmesg | grep -i vfio
+[    5.233709] VFIO - User Level meta-driver version: 0.3
+[    5.247309] vfio_pci: add [1b21:0612[ffffffff:ffffffff]] class 0x000000/00000000
+[  196.498056] vfio-pci 0000:01:00.0: resetting
+[  196.522408] vfio-pci 0000:01:00.0: reset done
+[  197.546977] vfio-pci 0000:01:00.0: resetting
+[  197.571370] vfio-pci 0000:01:00.0: reset done
+[  197.591056] vfio-pci 0000:01:00.0: resetting
+[  199.676694] vfio-pci 0000:01:00.0: reset done
+[  199.676721] vfio-pci 0000:01:00.0: resetting
+[  201.728786] vfio-pci 0000:01:00.0: reset done
+[  201.728962] vfio-pci 0000:01:00.0: Relaying device request to user (#0)
+[  202.024932] vfio-pci 0000:01:00.0: vfio_bar_restore: reset recovery - restoring BARs
+[  202.045154] vfio-pci 0000:01:00.0: vfio_bar_restore: reset recovery - restoring BARs
+[  202.062945] vfio-pci 0000:01:00.0: vfio_bar_restore: reset recovery - restoring BARs
+[  202.085279] vfio-pci 0000:01:00.0: vfio_bar_restore: reset recovery - restoring BARs
+[  202.085771] vfio-pci 0000:01:00.0: Invalid PCI ROM header signature: expecting 0xaa55, got 0xffff
+[  202.085920] vfio-pci 0000:01:00.0: vfio_bar_restore: reset recovery - restoring BARs
+[  202.094746] vfio-pci 0000:01:00.0: vfio_bar_restore: reset recovery - restoring BARs
+[  202.095044] vfio-pci 0000:01:00.0: vfio_bar_restore: reset recovery - restoring BARs
+[  202.095182] vfio-pci 0000:01:00.0: vfio_bar_restore: reset recovery - restoring BARs
+[  202.095396] vfio-pci 0000:01:00.0: vfio_bar_restore: reset recovery - restoring BARs
+[  202.128625] vfio-pci 0000:01:00.0: vfio_bar_restore: reset recovery - restoring BARs
+[  202.249622] vfio-pci 0000:01:00.0: vfio_bar_restore: reset recovery - restoring BARs
+[  215.856796] vfio-pci 0000:01:00.0: vfio_bar_restore: reset recovery - restoring BARs
+[  215.856921] vfio-pci 0000:01:00.0: vfio_bar_restore: reset recovery - restoring BARs
+[  304.150639] vfio-pci 0000:01:00.0: Relaying device request to user (#10)
+[  406.552370] vfio-pci 0000:01:00.0: Relaying device request to user (#20)
+[  508.955130] vfio-pci 0000:01:00.0: Relaying device request to user (#30)
+[  611.356286] vfio-pci 0000:01:00.0: Relaying device request to user (#40)
+[  713.758904] vfio-pci 0000:01:00.0: Relaying device request to user (#50)
+
+
+-----------------------------------
+------------------------------------
+08/25/26 - testing again
+#starting config:
+#pve host:
+# /etc/modprobe.d/vfio.conf (empty):
+
+# /etc/modules-load.d/vfio.conf (empty):
+
+# /etc/default/grub
+	GRUB_DEFAULT=0
+	GRUB_TIMEOUT=5
+	GRUB_DISTRIBUTOR=`( . /etc/os-release && echo ${NAME} )`
+	GRUB_CMDLINE_LINUX_DEFAULT="quiet intel_iommu=on intel_iommu=pt"
+	GRUB_CMDLINE_LINUX=""
+
+#root@LilNAS-ME:/# cat /etc/pve/qemu-server/102.conf
+	acpi: 1
+	balloon: 0
+	bios: ovmf
+	boot: order=usb0
+	cores: 2
+	cpu: x86-64-v2-AES
+	efidisk0: local-lvm:vm-102-disk-0,efitype=4m,ms-cert=2023k,pre-enrolled-keys=1,size=4M
+	hostpci0: 0000:01:00.0,pcie=1,rombar=0
+	hotplug: disk,network,usb
+	ide2: none,media=cdrom
+	kvm: 0
+	machine: q35
+	memory: 4096
+	meta: creation-qemu=11.0.3,ctime=1787601505
+	name: unraid-vm102
+	net0: virtio=BC:24:11:BE:F4:E0,bridge=vmbr0,firewall=1
+	numa: 0
+	ostype: l26
+	scsihw: virtio-scsi-single
+	smbios1: uuid=b246ac1f-8fc5-4573-bafe-34e06bfc15e2
+	sockets: 1
+	usb0: host=058f:6387
+	vmgenid: 93166965-63ba-4d37-b5cb-3c01e8f3d14f
+
+
+#created /etc/systemd/system/asm1062-reset-fix.service according to Gemini's instruction - trying to make a persistent hack to overwrite the ASMedia ASM1062 SATA Controller (01:00.0) pci device  reset_method:
+####
+ini
+[Unit]
+Description=Override ASMedia ASM1062 SATA Controller Reset Method to Bus
+DefaultDependencies=no
+After=systemd-modules-load.service
+Before=pve-cluster.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c "echo bus > /sys/bus/pci/devices/0000:01:00.0/reset_method"
+
+[Install]
+WantedBy=sysinit.target
+######
+systemctl daemon-reload
+systemctl enable asm1062-reset-fix.service
+systemctl start asm1062-reset-fix.service
+
+
+#on clean boot: root@LilNAS-ME:~# lspci -vv -s 01:00.0
+01:00.0 SATA controller: ASMedia Technology Inc. Device 1062 (rev 02) (prog-if 01 [AHCI 1.0])
+        Subsystem: ASMedia Technology Inc. Device 2116
+        Control: I/O+ Mem+ BusMaster+ SpecCycle- MemWINV- VGASnoop- ParErr- Stepping- SERR- FastB2B- DisINTx+
+        Status: Cap+ 66MHz- UDF- FastB2B- ParErr- DEVSEL=fast >TAbort- <TAbort- <MAbort- >SERR- <PERR- INTx-
+        Latency: 0, Cache Line Size: 64 bytes
+        Interrupt: pin A routed to IRQ 131
+        IOMMU group: 17
+        Region 0: Memory at 94782000 (32-bit, non-prefetchable) [size=8K]
+        Region 5: Memory at 94780000 (32-bit, non-prefetchable) [size=8K]
+        Expansion ROM at 94700000 [disabled] [size=512K]
+        Capabilities: [40] Power Management version 3
+                Flags: PMEClk- DSI+ D1- D2- AuxCurrent=0mA PME(D0+,D1-,D2-,D3hot+,D3cold+)
+                Status: D0 NoSoftRst- PME-Enable- DSel=0 DScale=0 PME-
+        Capabilities: [50] MSI: Enable+ Count=1/1 Maskable- 64bit+
+                Address: 00000000fee00338  Data: 0000
+        Capabilities: [80] Express (v2) Endpoint, IntMsgNum 0
+                DevCap: MaxPayload 256 bytes, PhantFunc 0, Latency L0s unlimited, L1 unlimited
+                        ExtTag+ AttnBtn- AttnInd- PwrInd- RBE+ FLReset- SlotPowerLimit 10W TEE-IO-
+                DevCtl: CorrErr+ NonFatalErr+ FatalErr+ UnsupReq+
+                        RlxdOrd+ ExtTag+ PhantFunc- AuxPwr- NoSnoop+
+                        MaxPayload 256 bytes, MaxReadReq 256 bytes
+                DevSta: CorrErr- NonFatalErr- FatalErr- UnsupReq- AuxPwr- TransPend-
+                LnkCap: Port #0, Speed 8GT/s, Width x1, ASPM L0s L1, Exit Latency L0s <4us, L1 <64us
+                        ClockPM+ Surprise- LLActRep- BwNot- ASPMOptComp+
+                LnkCtl: ASPM L0s L1 Enabled; RCB 64 bytes, LnkDisable- CommClk+
+                        ExtSynch- ClockPM+ AutWidDis- BWInt- AutBWInt-
+                LnkSta: Speed 8GT/s, Width x1
+                        TrErr- Train- SlotClk+ DLActive- BWMgmt- ABWMgmt-
+                DevCap2: Completion Timeout: Not Supported, TimeoutDis- NROPrPrP- LTR-
+                         10BitTagComp- 10BitTagReq- OBFF Not Supported, ExtFmt- EETLPPrefix-
+                         EmergencyPowerReduction Not Supported, EmergencyPowerReductionInit-
+                         FRS- TPHComp- ExtTPHComp-
+                         AtomicOpsCap: 32bit- 64bit- 128bitCAS-
+                DevCtl2: Completion Timeout: 50us to 50ms, TimeoutDis-
+                         AtomicOpsCtl: ReqEn-
+                         IDOReq- IDOCompl- LTR- EmergencyPowerReductionReq-
+                         10BitTagReq- OBFF Disabled, EETLPPrefixBlk-
+                LnkCap2: Supported Link Speeds: 2.5-8GT/s, Crosslink- Retimer- 2Retimers- DRS-
+                LnkCtl2: Target Link Speed: 8GT/s, EnterCompliance- SpeedDis+
+                         Transmit Margin: Normal Operating Range, EnterModifiedCompliance- ComplianceSOS-
+                         Compliance Preset/De-emphasis: -6dB de-emphasis, 0dB preshoot
+                LnkSta2: Current De-emphasis Level: -6dB, EqualizationComplete+ EqualizationPhase1+
+                         EqualizationPhase2+ EqualizationPhase3+ LinkEqualizationRequest-
+                         Retimer- 2Retimers- CrosslinkRes: unsupported
+        Capabilities: [100 v1] Advanced Error Reporting
+                UESta:  DLP- SDES- TLP- FCP- CmpltTO- CmpltAbrt- UnxCmplt- RxOF- MalfTLP-
+                        ECRC- UnsupReq- ACSViol- UncorrIntErr- BlockedTLP- AtomicOpBlocked- TLPBlockedErr-
+                        PoisonTLPBlocked- DMWrReqBlocked- IDECheck- MisIDETLP- PCRC_CHECK- TLPXlatBlocked-
+                UEMsk:  DLP- SDES- TLP- FCP- CmpltTO- CmpltAbrt- UnxCmplt- RxOF- MalfTLP-
+                        ECRC- UnsupReq- ACSViol- UncorrIntErr+ BlockedTLP- AtomicOpBlocked- TLPBlockedErr-
+                        PoisonTLPBlocked+ DMWrReqBlocked- IDECheck- MisIDETLP- PCRC_CHECK- TLPXlatBlocked-
+                UESvrt: DLP+ SDES+ TLP- FCP+ CmpltTO- CmpltAbrt- UnxCmplt- RxOF+ MalfTLP+
+                        ECRC- UnsupReq- ACSViol- UncorrIntErr+ BlockedTLP- AtomicOpBlocked- TLPBlockedErr-
+                        PoisonTLPBlocked- DMWrReqBlocked- IDECheck- MisIDETLP- PCRC_CHECK- TLPXlatBlocked-
+                CESta:  RxErr- BadTLP- BadDLLP- Rollover- Timeout- AdvNonFatalErr- CorrIntErr- HeaderOF-
+                CEMsk:  RxErr- BadTLP- BadDLLP- Rollover- Timeout- AdvNonFatalErr+ CorrIntErr+ HeaderOF+
+                AERCap: First Error Pointer: 00, ECRCGenCap- ECRCGenEn- ECRCChkCap- ECRCChkEn-
+                        MultHdrRecCap- MultHdrRecEn- TLPPfxPres- HdrLogCap-
+                HeaderLog: 00000000 00000000 00000000 00000000
+        Capabilities: [130 v1] Secondary PCI Express
+                LnkCtl3: LnkEquIntrruptEn- PerformEqu-
+                LaneErrStat: 0
+        Kernel driver in use: ahci
+        Kernel modules: ahci
+
+# proxmox task error after trying to start VM
+error writing '1' to '/sys/bus/pci/devices/0000:01:00.0/reset': Inappropriate ioctl for device
+failed to reset PCI device '0000:01:00.0', but trying to continue as not all devices need a reset
+kvm: -device vfio-pci,host=0000:01:00.0,id=hostpci0,bus=ich9-pcie-port-1,addr=0x0,rombar=0: vfio 0000:01:00.0: invalid PCI interrupt pin 255
+TASK ERROR: start failed: QEMU exited with code 1
+
+#look at pci device again:
+root@LilNAS-ME:~# lspci -vv -s 01:00.0
+01:00.0 SATA controller: ASMedia Technology Inc. Device 1062 (rev 02) (prog-if 01 [AHCI 1.0])
+        Subsystem: ASMedia Technology Inc. Device 2116
+        !!! Unknown header type 7f
+        Interrupt: pin ? routed to IRQ 16
+        IOMMU group: 17
+        Region 0: Memory at 94782000 (32-bit, non-prefetchable) [size=8K]
+        Region 5: Memory at 94780000 (32-bit, non-prefetchable) [size=8K]
+        Expansion ROM at 94700000 [disabled] [size=512K]
+        Kernel driver in use: vfio-pci
+        Kernel modules: ahci
+
+
+#after failed VM start with passthrough set (args = ...) and ...
+# /etc/modprobe.d/vfio.conf set with:
+	 options vfio-pci ids=1b21:1062 disable_vga=1
+	 softdep ahci pre: vfio_pci
+# /etc/modules-load.d/vfio.conf :
+	vfio
+	vfio_iommu_type1
+	vfio_pci
+	vfio_virqfd
+# /etc/default/grub :
+ # same as previous
+
+#shutdown from proxmox web gui, system gets stuck on black screen during shutdown and requires hard power off from button to complete. Then start from power button agian...
+root@LilNAS-ME:~# lspci -vv -s 01:00.0
+01:00.0 SATA controller: ASMedia Technology Inc. Device 1062 (rev 02) (prog-if 01 [AHCI 1.0])
+        Subsystem: ASMedia Technology Inc. Device 2116
+        Control: I/O+ Mem+ BusMaster+ SpecCycle- MemWINV- VGASnoop- ParErr- Stepping- SERR- FastB2B- DisINTx-
+        Status: Cap+ 66MHz- UDF- FastB2B- ParErr- DEVSEL=fast >TAbort- <TAbort- <MAbort- >SERR- <PERR- INTx-
+        Latency: 0, Cache Line Size: 64 bytes
+        Interrupt: pin A routed to IRQ 255
+        IOMMU group: 17
+        Region 0: Memory at 94782000 (32-bit, non-prefetchable) [size=8K]
+        Region 5: Memory at 94780000 (32-bit, non-prefetchable) [size=8K]
+        Expansion ROM at 94700000 [disabled] [size=512K]
+        Capabilities: [40] Power Management version 3
+                Flags: PMEClk- DSI+ D1- D2- AuxCurrent=0mA PME(D0+,D1-,D2-,D3hot+,D3cold+)
+                Status: D3 NoSoftRst- PME-Enable+ DSel=0 DScale=0 PME-
+        Capabilities: [50] MSI: Enable- Count=1/1 Maskable- 64bit+
+                Address: 0000000000000000  Data: 0000
+        Capabilities: [80] Express (v2) Endpoint, IntMsgNum 0
+                DevCap: MaxPayload 256 bytes, PhantFunc 0, Latency L0s unlimited, L1 unlimited
+                        ExtTag+ AttnBtn- AttnInd- PwrInd- RBE+ FLReset- SlotPowerLimit 10W TEE-IO-
+                DevCtl: CorrErr+ NonFatalErr+ FatalErr+ UnsupReq+
+                        RlxdOrd+ ExtTag+ PhantFunc- AuxPwr- NoSnoop+
+                        MaxPayload 256 bytes, MaxReadReq 256 bytes
+                DevSta: CorrErr- NonFatalErr- FatalErr- UnsupReq- AuxPwr- TransPend-
+                LnkCap: Port #0, Speed 8GT/s, Width x1, ASPM L0s L1, Exit Latency L0s <4us, L1 <64us
+                        ClockPM+ Surprise- LLActRep- BwNot- ASPMOptComp+
+                LnkCtl: ASPM L0s L1 Enabled; RCB 64 bytes, LnkDisable- CommClk+
+                        ExtSynch- ClockPM+ AutWidDis- BWInt- AutBWInt-
+                LnkSta: Speed 8GT/s, Width x1
+                        TrErr- Train- SlotClk+ DLActive- BWMgmt- ABWMgmt-
+                DevCap2: Completion Timeout: Not Supported, TimeoutDis- NROPrPrP- LTR-
+                         10BitTagComp- 10BitTagReq- OBFF Not Supported, ExtFmt- EETLPPrefix-
+                         EmergencyPowerReduction Not Supported, EmergencyPowerReductionInit-
+                         FRS- TPHComp- ExtTPHComp-
+                         AtomicOpsCap: 32bit- 64bit- 128bitCAS-
+                DevCtl2: Completion Timeout: 50us to 50ms, TimeoutDis-
+                         AtomicOpsCtl: ReqEn-
+                         IDOReq- IDOCompl- LTR- EmergencyPowerReductionReq-
+                         10BitTagReq- OBFF Disabled, EETLPPrefixBlk-
+                LnkCap2: Supported Link Speeds: 2.5-8GT/s, Crosslink- Retimer- 2Retimers- DRS-
+                LnkCtl2: Target Link Speed: 8GT/s, EnterCompliance- SpeedDis+
+                         Transmit Margin: Normal Operating Range, EnterModifiedCompliance- ComplianceSOS-
+                         Compliance Preset/De-emphasis: -6dB de-emphasis, 0dB preshoot
+                LnkSta2: Current De-emphasis Level: -6dB, EqualizationComplete+ EqualizationPhase1+
+                         EqualizationPhase2+ EqualizationPhase3+ LinkEqualizationRequest-
+                         Retimer- 2Retimers- CrosslinkRes: unsupported
+        Capabilities: [100 v1] Advanced Error Reporting
+                UESta:  DLP- SDES- TLP- FCP- CmpltTO- CmpltAbrt- UnxCmplt- RxOF- MalfTLP-
+                        ECRC- UnsupReq- ACSViol- UncorrIntErr- BlockedTLP- AtomicOpBlocked- TLPBlockedErr-
+                        PoisonTLPBlocked- DMWrReqBlocked- IDECheck- MisIDETLP- PCRC_CHECK- TLPXlatBlocked-
+                UEMsk:  DLP- SDES- TLP- FCP- CmpltTO- CmpltAbrt- UnxCmplt- RxOF- MalfTLP-
+                        ECRC- UnsupReq- ACSViol- UncorrIntErr+ BlockedTLP- AtomicOpBlocked- TLPBlockedErr-
+                        PoisonTLPBlocked+ DMWrReqBlocked- IDECheck- MisIDETLP- PCRC_CHECK- TLPXlatBlocked-
+                UESvrt: DLP+ SDES+ TLP- FCP+ CmpltTO- CmpltAbrt- UnxCmplt- RxOF+ MalfTLP+
+                        ECRC- UnsupReq- ACSViol- UncorrIntErr+ BlockedTLP- AtomicOpBlocked- TLPBlockedErr-
+                        PoisonTLPBlocked- DMWrReqBlocked- IDECheck- MisIDETLP- PCRC_CHECK- TLPXlatBlocked-
+                CESta:  RxErr- BadTLP- BadDLLP- Rollover- Timeout- AdvNonFatalErr- CorrIntErr- HeaderOF-
+                CEMsk:  RxErr- BadTLP- BadDLLP- Rollover- Timeout- AdvNonFatalErr+ CorrIntErr+ HeaderOF+
+                AERCap: First Error Pointer: 00, ECRCGenCap- ECRCGenEn- ECRCChkCap- ECRCChkEn-
+                        MultHdrRecCap- MultHdrRecEn- TLPPfxPres- HdrLogCap-
+                HeaderLog: 00000000 00000000 00000000 00000000
+        Capabilities: [130 v1] Secondary PCI Express
+                LnkCtl3: LnkEquIntrruptEn- PerformEqu-
+                LaneErrStat: 0
+        Kernel driver in use: vfio-pci
+        Kernel modules: ahci
+		
+try to start VM again, get same error:
+error writing '1' to '/sys/bus/pci/devices/0000:01:00.0/reset': Inappropriate ioctl for device
+failed to reset PCI device '0000:01:00.0', but trying to continue as not all devices need a reset
+kvm: -device vfio-pci,host=0000:01:00.0,id=hostpci0,bus=ich9-pcie-port-1,addr=0x0,rombar=0: vfio 0000:01:00.0: invalid PCI interrupt pin 255
+TASK ERROR: start failed: QEMU exited with code 1
+
+#lost the controller on the pci bus again
+root@LilNAS-ME:~# lspci -vv -s 01:00.0
+01:00.0 SATA controller: ASMedia Technology Inc. Device 1062 (rev 02) (prog-if 01 [AHCI 1.0])
+        Subsystem: ASMedia Technology Inc. Device 2116
+        !!! Unknown header type 7f
+        Interrupt: pin ? routed to IRQ 16
+        IOMMU group: 17
+        Region 0: Memory at 94782000 (32-bit, non-prefetchable) [size=8K]
+        Region 5: Memory at 94780000 (32-bit, non-prefetchable) [size=8K]
+        Expansion ROM at 94700000 [disabled] [size=512K]
+        Kernel driver in use: vfio-pci
+        Kernel modules: ahci

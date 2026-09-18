@@ -19,7 +19,7 @@ Transferring my data from the mini PC to a proper 12-bay NAS running Unraid (4x8
 
 #Installation from proxmox node shell:  
 cd /tmp
-wget https://github.com/schmore/realtek-rtl8127/raw/refs/heads/main/r8127-11.016.00.tar.bz2
+wget https://github.com/schmore/Proxmox-Install-and-Config-for-Beelink-ME-Pro-Wildcat-Lake-304/raw/refs/heads/main/r8127-11.016.00.tar.bz2
 bunzip2 r8127-11.016.00.tar.bz2
 tar -xf r8127-11.016.00.tar
 cd r8127-11.016.00
